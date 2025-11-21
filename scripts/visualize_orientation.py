@@ -23,7 +23,13 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 # Configuration
 import os
-SERIAL_PORT = '/dev/cu.usbmodem212401'
+import sys
+
+# Serial port configuration
+# For USB: '/dev/cu.usbmodem212401'
+# For HC-05 Bluetooth: '/dev/cu.HC-05-DevB' (macOS) or '/dev/rfcomm0' (Linux) or 'COM5' (Windows)
+# Can be overridden with environment variable: SERIAL_PORT=/dev/cu.HC-05-DevB ./visualize_orientation.py
+SERIAL_PORT = os.environ.get('SERIAL_PORT', '/dev/cu.usbmodem212401')
 BAUD_RATE = 115200
 SERIAL_LOG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'serial.log')
 UPDATE_INTERVAL = 100  # milliseconds
@@ -329,7 +335,11 @@ def main():
     print("=" * 60)
     print("  Posture Monitor - 3D Orientation Visualizer")
     print("=" * 60)
-    print(f"Reading from: {SERIAL_LOG}")
+    if USE_SERIAL_PORT:
+        print(f"Reading from serial port: {SERIAL_PORT}")
+        print(f"Baud rate: {BAUD_RATE}")
+    else:
+        print(f"Reading from log file: {SERIAL_LOG}")
     print("Press Ctrl+C to stop")
     print()
 
