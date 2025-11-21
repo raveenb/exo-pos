@@ -1,0 +1,44 @@
+# Arduino
+*.hex
+*.eep
+*.elf
+*.map
+
+# Build directories
+build/
+*.build/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python (for future data analysis scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+
+# Data files (optional - uncomment if you don't want to commit logs)
+# *.csv
+# *.db
+# *.sqlite
+
+# Temporary files
+*.tmp
+*.bak
+*.log
