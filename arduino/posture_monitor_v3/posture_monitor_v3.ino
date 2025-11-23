@@ -50,13 +50,13 @@
 // POSTURE DETECTION PARAMETERS
 // ============================================================================
 
-// Forward head posture (tech neck) detection
+// Head tilt detection (pitch: forward/backward, roll: left/right)
 // NOTE: This is RELATIVE to your calibrated neutral position
-const float FORWARD_SLOUCH_ANGLE = 15.0;   // Pitch threshold (degrees from neutral)
+const float FORWARD_SLOUCH_ANGLE = 15.0;   // Pitch threshold (degrees from neutral, bidirectional)
 const float HYSTERESIS = 2.0;              // Deadband to prevent flickering
 
 // Side tilt detection (optional - can be enabled later)
-const float SIDE_TILT_ANGLE = 15.0;        // Roll threshold (degrees)
+const float SIDE_TILT_ANGLE = 15.0;        // Roll threshold (degrees, bidirectional)
 const bool ENABLE_SIDE_TILT_ALERT = false; // Currently disabled
 
 // Motion detection threshold
@@ -83,13 +83,13 @@ const bool TESTING_MODE = true;
 
 // TESTING MILESTONES: Double beep every 10 seconds
 const unsigned long ALERT_MILESTONES[] = {
+  5000,    // 5s  - Double beep (faster testing)
   10000,   // 10s - Double beep
+  15000,   // 15s - Double beep
   20000,   // 20s - Double beep
   30000,   // 30s - Double beep
   40000,   // 40s - Double beep
-  50000,   // 50s - Double beep
-  60000,   // 60s - Double beep
-  70000    // 70s - Double beep (and continues...)
+  50000    // 50s - Double beep
 };
 const int NUM_MILESTONES = 7;
 
@@ -181,15 +181,21 @@ void readGyroscope(float &gx, float &gy, float &gz) {
 // Calculate head position angles from accelerometer
 void calculatePosture(float ax, float ay, float az, float &pitch, float &roll) {
   // Pitch: forward/backward tilt (looking down/up)
-  // When head goes forward, C7 tilts forward -> pitch increases
   pitch = atan2(ay, az) * 180.0 / PI;
 
   // Roll: left/right tilt (ear to shoulder)
   roll = atan2(ax, az) * 180.0 / PI;
 
-  // Apply calibration offsets
+  // Apply calibration offsets FIRST
   pitch -= pitchOffset;
   roll -= rollOffset;
+
+  // THEN invert BOTH axes for sensor orientation
+  // Sensor mounted upside-down on hat, so negate both pitch and roll AFTER calibration
+  // Positive pitch = looking down (forward slouch)
+  // Negative pitch = looking up (backward tilt)
+  pitch = -pitch;
+  roll = -roll;
 }
 
 // Check if user is actively moving (not static slouch)
@@ -201,10 +207,16 @@ bool checkMovement(float gx, float gy, float gz) {
 
 // Check if current posture requires alerting
 bool checkPosture(float pitch, float roll) {
-  bool forwardSlouch = (pitch > FORWARD_SLOUCH_ANGLE);
-  bool sideTilt = ENABLE_SIDE_TILT_ALERT && (abs(roll) > SIDE_TILT_ANGLE);
+  // Use fabs() for floats instead of abs() which is for integers
+  float absPitch = fabs(pitch);
 
-  return (forwardSlouch || sideTilt);
+  // TEMPORARILY DISABLED: Skip side tilt for testing
+  // float absRoll = fabs(roll);
+  // bool sideTilt = ENABLE_SIDE_TILT_ALERT && (absRoll > SIDE_TILT_ANGLE);
+
+  bool pitchSlouch = (absPitch > FORWARD_SLOUCH_ANGLE);  // Both forward AND backward tilt
+
+  return pitchSlouch;  // Only check pitch, ignore roll for now
 }
 
 // ============================================================================
@@ -262,9 +274,9 @@ bool shouldTriggerAlert() {
     // In testing mode, check if we've hit any 10-second milestone
     for (int i = 0; i < NUM_MILESTONES; i++) {
       unsigned long milestone = ALERT_MILESTONES[i];
-      // Check if we just crossed this milestone (within last 200ms)
+      // Check if we just crossed this milestone (within last 500ms for better detection)
       if (cumulativeSlouchTime >= milestone &&
-          cumulativeSlouchTime < milestone + 200) {
+          cumulativeSlouchTime < milestone + 500) {
         currentAlertLevel = LEVEL_WARNING;
         return true;
       }
@@ -454,6 +466,10 @@ void outputJSON(float pitch, float roll, float gx, float gy, float gz) {
   // Alert state
   Serial.print(",\"threshold\":");
   Serial.print(FORWARD_SLOUCH_ANGLE, 1);
+  Serial.print(",\"abs_pitch\":");
+  Serial.print(fabs(pitch), 2);
+  Serial.print(",\"abs_roll\":");
+  Serial.print(fabs(roll), 2);
   Serial.print(",\"forward_slouch\":");
   Serial.print(inBadPosture ? "true" : "false");
   Serial.print(",\"alert_active\":");
@@ -682,10 +698,14 @@ void loop() {
 
   // ---- ALERT LOGIC ----
 
-  // Check if we should trigger a new alert (crossed milestone)
-  if (shouldTriggerAlert() && !buzzerActive) {
+  // SIMPLIFIED ALERT LOGIC: Just beep when slouching for 5+ seconds
+  // Instead of complex milestone detection, use simple threshold
+
+  if (inBadPosture && !isMoving && cumulativeSlouchTime >= 5000 && !buzzerActive) {
+    // Start beeping after 5 seconds of continuous slouch
     buzzerActive = true;
     buzzerStartTime = now;
+    currentAlertLevel = LEVEL_WARNING;
   }
 
   // Handle posture correction after critical state
@@ -716,7 +736,8 @@ void loop() {
 
   // Stop non-critical alerts when posture improves significantly
   if (buzzerActive && currentAlertLevel != LEVEL_CRITICAL) {
-    if (pitch < (FORWARD_SLOUCH_ANGLE - HYSTERESIS)) {
+    // Use absolute value to handle both forward and backward tilt
+    if (fabs(pitch) < (FORWARD_SLOUCH_ANGLE - HYSTERESIS)) {
       buzzerActive = false;
       digitalWrite(BUZZER_PIN, HIGH);
       noTone(BUZZER_PIN);

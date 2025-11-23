@@ -151,6 +151,11 @@ def read_latest_data():
                     if not line:
                         continue
 
+                    # Print DEBUG lines to console
+                    if line.startswith('DEBUG:'):
+                        print(line)
+                        continue
+
                     data = json.loads(line)
                     # Only update if this is actual posture data
                     if 'pitch' in data and 'roll' in data:
@@ -247,8 +252,8 @@ def init_plot():
 
     # 2D angle indicators
     ax2d = fig.add_subplot(122)
-    ax2d.set_xlim([-30, 30])
-    ax2d.set_ylim([-30, 30])
+    ax2d.set_xlim([-90, 90])   # Roll: ±90° for full left/right range
+    ax2d.set_ylim([-90, 90])   # Pitch: ±90° for full forward/backward range
     ax2d.set_xlabel('Roll (degrees)', fontsize=12)
     ax2d.set_ylabel('Pitch (degrees)', fontsize=12)
     ax2d.set_title('Angle Indicators', fontsize=14, fontweight='bold')
@@ -256,15 +261,38 @@ def init_plot():
     ax2d.axhline(0, color='black', linewidth=0.5)
     ax2d.axvline(0, color='black', linewidth=0.5)
 
-    # Draw threshold zones
+    # Draw threshold zones - all four quadrants
     threshold = 15.0
-    slouch_zone = Rectangle((-30, threshold), 60, 30-threshold,
-                           alpha=0.2, color='red', label='Slouch Zone')
-    ax2d.add_patch(slouch_zone)
+    # Top zone: Pitch forward (looking down)
+    slouch_zone_top = Rectangle((-90, threshold), 180, 90-threshold,
+                           alpha=0.25, color='#FF4444', label='Slouch Zones')
+    ax2d.add_patch(slouch_zone_top)
 
-    good_zone = Rectangle((-30, -threshold), 60, 2*threshold,
-                         alpha=0.2, color='green', label='Good Posture')
+    # Bottom zone: Pitch backward (looking up)
+    slouch_zone_bottom = Rectangle((-90, -90), 180, 90-threshold,
+                           alpha=0.25, color='#FF4444')
+    ax2d.add_patch(slouch_zone_bottom)
+
+    # Left zone: Roll left (head to left shoulder)
+    slouch_zone_left = Rectangle((-90, -threshold), 90-threshold, 2*threshold,
+                           alpha=0.25, color='#FF8800')
+    ax2d.add_patch(slouch_zone_left)
+
+    # Right zone: Roll right (head to right shoulder)
+    slouch_zone_right = Rectangle((threshold, -threshold), 90-threshold, 2*threshold,
+                           alpha=0.25, color='#FF8800')
+    ax2d.add_patch(slouch_zone_right)
+
+    # Center good posture zone
+    good_zone = Rectangle((-threshold, -threshold), 2*threshold, 2*threshold,
+                         alpha=0.35, color='#44FF44', label='Good Posture')
     ax2d.add_patch(good_zone)
+
+    # Threshold lines
+    ax2d.axhline(threshold, color='red', linestyle='--', linewidth=2, alpha=0.7)
+    ax2d.axhline(-threshold, color='red', linestyle='--', linewidth=2, alpha=0.7)
+    ax2d.axvline(threshold, color='orange', linestyle='--', linewidth=2, alpha=0.7)
+    ax2d.axvline(-threshold, color='orange', linestyle='--', linewidth=2, alpha=0.7)
 
     ax2d.legend(loc='upper right')
 
@@ -324,8 +352,8 @@ def update_plot(frame, fig, ax3d, ax2d):
     ax3d.set_title(status_text, fontsize=14, fontweight='bold', color=status_color)
 
     # Redraw 2D angle view
-    ax2d.set_xlim([-30, 30])
-    ax2d.set_ylim([-30, 30])
+    ax2d.set_xlim([-90, 90])   # Roll: ±90° for full left/right range
+    ax2d.set_ylim([-90, 90])   # Pitch: ±90° for full forward/backward range
     ax2d.set_xlabel('Roll (degrees)', fontsize=12)
     ax2d.set_ylabel('Pitch (degrees)', fontsize=12)
     ax2d.set_title(f'Pitch: {pitch:.1f}° | Roll: {roll:.1f}°',
@@ -334,18 +362,37 @@ def update_plot(frame, fig, ax3d, ax2d):
     ax2d.axhline(0, color='black', linewidth=0.5)
     ax2d.axvline(0, color='black', linewidth=0.5)
 
-    # Draw threshold zones
-    slouch_zone = Rectangle((-30, threshold), 60, 30-threshold,
-                           alpha=0.2, color='red', label='Slouch Zone')
-    ax2d.add_patch(slouch_zone)
+    # Draw threshold zones - all four quadrants
+    # Top zone: Pitch forward (looking down)
+    slouch_zone_top = Rectangle((-90, threshold), 180, 90-threshold,
+                           alpha=0.25, color='#FF4444', label='Slouch Zones')
+    ax2d.add_patch(slouch_zone_top)
 
-    good_zone = Rectangle((-30, -threshold), 60, 2*threshold,
-                         alpha=0.2, color='green', label='Good Posture')
+    # Bottom zone: Pitch backward (looking up)
+    slouch_zone_bottom = Rectangle((-90, -90), 180, 90-threshold,
+                           alpha=0.25, color='#FF4444')
+    ax2d.add_patch(slouch_zone_bottom)
+
+    # Left zone: Roll left (head to left shoulder)
+    slouch_zone_left = Rectangle((-90, -threshold), 90-threshold, 2*threshold,
+                           alpha=0.25, color='#FF8800')
+    ax2d.add_patch(slouch_zone_left)
+
+    # Right zone: Roll right (head to right shoulder)
+    slouch_zone_right = Rectangle((threshold, -threshold), 90-threshold, 2*threshold,
+                           alpha=0.25, color='#FF8800')
+    ax2d.add_patch(slouch_zone_right)
+
+    # Center good posture zone
+    good_zone = Rectangle((-threshold, -threshold), 2*threshold, 2*threshold,
+                         alpha=0.35, color='#44FF44', label='Good Posture')
     ax2d.add_patch(good_zone)
 
     # Draw threshold lines
-    ax2d.axhline(threshold, color='red', linestyle='--', linewidth=2, alpha=0.7)
-    ax2d.axhline(-threshold, color='blue', linestyle='--', linewidth=2, alpha=0.7)
+    ax2d.axhline(threshold, color='red', linestyle='--', linewidth=2, alpha=0.7, label='Pitch ±15°')
+    ax2d.axhline(-threshold, color='red', linestyle='--', linewidth=2, alpha=0.7)
+    ax2d.axvline(threshold, color='orange', linestyle='--', linewidth=2, alpha=0.7, label='Roll ±15°')
+    ax2d.axvline(-threshold, color='orange', linestyle='--', linewidth=2, alpha=0.7)
 
     # Plot current position
     marker_color = 'red' if slouch else 'green'
