@@ -26,11 +26,72 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import os
 import sys
 
+def select_serial_port():
+    """Auto-detect available serial ports and let user select one"""
+    try:
+        import serial.tools.list_ports
+
+        # Get list of available ports
+        ports = list(serial.tools.list_ports.comports())
+
+        if not ports:
+            print("No serial ports found!")
+            print("Please connect your Arduino and try again.")
+            sys.exit(1)
+
+        # If only one port, use it automatically
+        if len(ports) == 1:
+            selected_port = ports[0].device
+            print(f"Auto-selected only available port: {selected_port}")
+            print(f"  Description: {ports[0].description}")
+            return selected_port
+
+        # Multiple ports - show menu
+        print("\nAvailable serial ports:")
+        print("=" * 60)
+        for i, port in enumerate(ports, 1):
+            print(f"  [{i}] {port.device}")
+            print(f"      Description: {port.description}")
+            if port.manufacturer:
+                print(f"      Manufacturer: {port.manufacturer}")
+            print()
+
+        # Get user selection
+        while True:
+            try:
+                choice = input(f"Select port (1-{len(ports)}) or 'q' to quit: ").strip()
+                if choice.lower() == 'q':
+                    print("Exiting.")
+                    sys.exit(0)
+
+                idx = int(choice) - 1
+                if 0 <= idx < len(ports):
+                    selected_port = ports[idx].device
+                    print(f"\nSelected: {selected_port}")
+                    return selected_port
+                else:
+                    print(f"Please enter a number between 1 and {len(ports)}")
+            except (ValueError, KeyboardInterrupt):
+                print("\nExiting.")
+                sys.exit(0)
+
+    except ImportError:
+        print("Warning: serial.tools.list_ports not available")
+        print("Please install pyserial: pip install pyserial")
+        sys.exit(1)
+
 # Serial port configuration
-# For USB: '/dev/cu.usbmodem212401'
-# For HC-05 Bluetooth: '/dev/cu.HC-05-DevB' (macOS) or '/dev/rfcomm0' (Linux) or 'COM5' (Windows)
-# Can be overridden with environment variable: SERIAL_PORT=/dev/cu.HC-05-DevB ./visualize_orientation.py
-SERIAL_PORT = os.environ.get('SERIAL_PORT', '/dev/cu.usbmodem212401')
+# Priority: 1) Command line arg  2) Environment variable  3) Auto-detect
+if len(sys.argv) > 1:
+    SERIAL_PORT = sys.argv[1]
+    print(f"Using port from command line: {SERIAL_PORT}")
+elif 'SERIAL_PORT' in os.environ:
+    SERIAL_PORT = os.environ['SERIAL_PORT']
+    print(f"Using port from environment: {SERIAL_PORT}")
+else:
+    print("No port specified, auto-detecting...")
+    SERIAL_PORT = select_serial_port()
+
 BAUD_RATE = 115200
 SERIAL_LOG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'serial.log')
 UPDATE_INTERVAL = 100  # milliseconds
@@ -59,6 +120,10 @@ smoothed_pitch = 0.0
 smoothed_roll = 0.0
 smoothing_initialized = False
 SMOOTHING_ALPHA = 0.5  # Higher = more responsive, Lower = smoother (0.3-0.7 optimal)
+
+# Debug: Print first few lines of serial data
+serial_lines_printed = 0
+MAX_DEBUG_LINES = 3  # Show first 3 data lines
 
 def rotation_matrix_x(angle):
     """Rotation matrix around X axis (roll)"""
@@ -133,6 +198,7 @@ def read_latest_data():
     """Read data from serial port or log file"""
     global current_data, log_file_handle, log_file_position, serial_connection
     global smoothed_pitch, smoothed_roll, smoothing_initialized
+    global serial_lines_printed
 
     if USE_SERIAL_PORT:
         # Read directly from serial port
@@ -143,6 +209,8 @@ def read_latest_data():
             if serial_connection is None:
                 serial_connection = pyserial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.1)
                 print(f"Connected to {SERIAL_PORT} @ {BAUD_RATE} baud")
+                print(f"\nShowing first {MAX_DEBUG_LINES} lines of serial data...")
+                print("=" * 60)
 
             # Read all available lines
             while serial_connection.in_waiting > 0:
@@ -155,6 +223,14 @@ def read_latest_data():
                     if line.startswith('DEBUG:'):
                         print(line)
                         continue
+
+                    # Print first few data lines for debugging
+                    if serial_lines_printed < MAX_DEBUG_LINES:
+                        print(f"[{serial_lines_printed + 1}] {line}")
+                        serial_lines_printed += 1
+                        if serial_lines_printed == MAX_DEBUG_LINES:
+                            print("=" * 60)
+                            print("Visualization starting...\n")
 
                     data = json.loads(line)
                     # Only update if this is actual posture data

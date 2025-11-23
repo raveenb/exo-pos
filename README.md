@@ -148,12 +148,22 @@ Run the Python visualizer for a live 3D representation of your head orientation:
 # Activate virtual environment if using one
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Run the visualizer (update port as needed)
+# Run the visualizer - it will auto-detect and let you select the serial port
 python3 scripts/visualize_orientation.py
 
-# Or specify a different serial port
+# Or specify a serial port directly
 python3 scripts/visualize_orientation.py /dev/ttyUSB0
+
+# Or use environment variable
+SERIAL_PORT=/dev/ttyUSB0 python3 scripts/visualize_orientation.py
 ```
+
+**Port Selection:**
+- **No arguments**: Visualizer will auto-detect all available serial ports and show an interactive menu
+- **If only one port found**: Automatically selects it
+- **Multiple ports**: Shows a numbered menu with descriptions to help you choose the correct Arduino
+- **Command line argument**: `python3 scripts/visualize_orientation.py /dev/ttyUSB0` (overrides auto-detection)
+- **Environment variable**: `SERIAL_PORT=/dev/cu.usbmodem1234` (overrides auto-detection)
 
 The visualizer shows:
 - **3D head model** with real-time orientation
