@@ -622,25 +622,12 @@ def update_plot(frame, fig, ax3d, ax2d, ax_port, ax_log):
              transform=ax2d.transAxes, fontsize=10, verticalalignment='top',
              bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.5))
 
-    # Show calibration status overlay
+    # Calibration status is now shown in the Arduino log panel instead of overlay
+    # Auto-clear calibration status after it completes
     calibration_status = current_data.get('calibration_status')
-    if calibration_status == 'calibrating':
-        countdown = current_data.get('calibration_countdown', '?')
-        # Large centered overlay on both plots
-        fig.text(0.5, 0.5, f'CALIBRATING\n{countdown}s\nHOLD STILL!',
-                ha='center', va='center', fontsize=32, fontweight='bold',
-                color='white',
-                bbox=dict(boxstyle='round,pad=1', facecolor='orange', alpha=0.9, edgecolor='red', linewidth=4))
-    elif calibration_status == 'calibrated':
-        # Auto-clear after 2 seconds
+    if calibration_status == 'calibrated':
         complete_time = current_data.get('calibration_complete_time')
-        if complete_time and (time.time() - complete_time < 2.0):
-            # Brief "complete" message (shows for 2 seconds)
-            fig.text(0.5, 0.5, 'CALIBRATION\nCOMPLETE!',
-                    ha='center', va='center', fontsize=28, fontweight='bold',
-                    color='white',
-                    bbox=dict(boxstyle='round,pad=1', facecolor='green', alpha=0.9, edgecolor='darkgreen', linewidth=4))
-        else:
+        if complete_time and (time.time() - complete_time > 2.0):
             # Clear status after 2 seconds
             current_data['calibration_status'] = None
 
