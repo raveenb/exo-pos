@@ -19,12 +19,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.animation import FuncAnimation
+from matplotlib.widgets import Button
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from collections import deque
 
 # Configuration
 import os
 import sys
+
+def get_available_ports():
+    """Get list of available serial ports"""
+    try:
+        import serial.tools.list_ports
+        ports = list(serial.tools.list_ports.comports())
+        return [(p.device, f"{p.device} - {p.description}") for p in ports]
+    except ImportError:
+        return []
 
 def select_serial_port():
     """Auto-detect available serial ports and let user select one"""
@@ -109,13 +120,49 @@ current_data = {
     'cumulative_slouch_s': 0,
     'threshold': 15.0,
     'calibration_status': None,  # Track calibration state
-    'calibration_countdown': None  # Countdown timer
+    'calibration_countdown': None,  # Countdown timer
+    'calibration_complete_time': None  # Time when calibration completed
 }
 
 # File/Serial tracking
 log_file_handle = None
 log_file_position = 0
 serial_connection = None
+current_serial_port = None  # Track which port is currently open
+available_ports = []  # List of (device, description) tuples
+port_selector_text = None  # Text widget showing current port
+
+# Log message buffer (circular buffer for recent messages)
+MAX_LOG_MESSAGES = 15  # Show last 15 messages
+log_messages = deque(maxlen=MAX_LOG_MESSAGES)
+
+def switch_serial_port(new_port):
+    """Switch to a different serial port"""
+    global serial_connection, current_serial_port, log_messages, smoothing_initialized
+
+    # Close existing connection
+    if serial_connection is not None:
+        try:
+            serial_connection.close()
+            print(f"Closed connection to {current_serial_port}")
+        except:
+            pass
+        serial_connection = None
+
+    # Clear log and reset state
+    log_messages.clear()
+    smoothing_initialized = False
+
+    # Open new connection
+    try:
+        import serial as pyserial
+        serial_connection = pyserial.Serial(new_port, BAUD_RATE, timeout=0.1)
+        current_serial_port = new_port
+        log_messages.append(f"[{time.strftime('%H:%M:%S')}] STATUS: Connected to {new_port}")
+        print(f"Connected to {new_port}")
+    except Exception as e:
+        log_messages.append(f"[{time.strftime('%H:%M:%S')}] ERROR: Failed to connect to {new_port}: {e}")
+        print(f"Error connecting to {new_port}: {e}")
 
 # Smoothing filter state (Exponential Moving Average)
 smoothed_pitch = 0.0
@@ -196,11 +243,37 @@ def get_alert_color(level_name):
     }
     return colors.get(level_name, 'gray')
 
+def add_log_message(line):
+    """Add a message to the log buffer with timestamp"""
+    timestamp = time.strftime('%H:%M:%S')
+
+    # Try to parse as JSON and format nicely
+    try:
+        data = json.loads(line)
+        if 'status' in data:
+            msg = f"[{timestamp}] STATUS: {data.get('status')} - {data.get('message', '')}"
+        elif 'debug' in data:
+            msg = f"[{timestamp}] DEBUG: {data.get('debug')}"
+        elif 'error' in data:
+            msg = f"[{timestamp}] ERROR: {data.get('error')}"
+        elif 'pitch' in data and 'roll' in data:
+            # Don't log regular posture data
+            return
+        else:
+            msg = f"[{timestamp}] {line[:60]}"
+    except json.JSONDecodeError:
+        # Non-JSON line
+        msg = f"[{timestamp}] {line[:60]}"
+
+    log_messages.append(msg)
+    # Also print to console
+    print(msg)
+
 def read_latest_data():
     """Read data from serial port or log file"""
     global current_data, log_file_handle, log_file_position, serial_connection
     global smoothed_pitch, smoothed_roll, smoothing_initialized
-    global serial_lines_printed
+    global serial_lines_printed, current_serial_port
 
     if USE_SERIAL_PORT:
         # Read directly from serial port
@@ -210,6 +283,7 @@ def read_latest_data():
             # Open serial connection on first call
             if serial_connection is None:
                 serial_connection = pyserial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.1)
+                current_serial_port = SERIAL_PORT
                 print(f"Connected to {SERIAL_PORT} @ {BAUD_RATE} baud")
                 print(f"\nShowing first {MAX_DEBUG_LINES} lines of serial data...")
                 print("=" * 60)
@@ -221,18 +295,16 @@ def read_latest_data():
                     if not line:
                         continue
 
-                    # Print DEBUG lines to console
-                    if line.startswith('DEBUG:'):
-                        print(line)
-                        continue
+                    # Add to log display (filters out regular posture data)
+                    add_log_message(line)
 
                     # Print first few data lines for debugging
                     if serial_lines_printed < MAX_DEBUG_LINES:
-                        print(f"[{serial_lines_printed + 1}] {line}")
-                        serial_lines_printed += 1
-                        if serial_lines_printed == MAX_DEBUG_LINES:
-                            print("=" * 60)
-                            print("Visualization starting...\n")
+                        if '"pitch"' in line:  # Only count posture data lines
+                            serial_lines_printed += 1
+                            if serial_lines_printed == MAX_DEBUG_LINES:
+                                print("=" * 60)
+                                print("Visualization starting...\n")
 
                     data = json.loads(line)
 
@@ -246,6 +318,7 @@ def read_latest_data():
                         elif status == 'calibrated':
                             current_data['calibration_status'] = 'calibrated'
                             current_data['calibration_countdown'] = None
+                            current_data['calibration_complete_time'] = time.time()  # Record completion time
                             print(f"CALIBRATION COMPLETE! Offsets: pitch={data.get('pitch_offset', 0):.2f}°, roll={data.get('roll_offset', 0):.2f}°")
                         continue
 
@@ -328,10 +401,19 @@ def read_latest_data():
 
 def init_plot():
     """Initialize the plot"""
-    fig = plt.figure(figsize=(14, 8))
+    global available_ports, port_selector_text
 
-    # 3D orientation view
-    ax3d = fig.add_subplot(121, projection='3d')
+    fig = plt.figure(figsize=(16, 9))
+
+    # Use GridSpec for custom layout: 3D view on left, right side has 2D view, log panel, port selector (top to bottom)
+    from matplotlib.gridspec import GridSpec
+    gs = GridSpec(3, 2, figure=fig, width_ratios=[1, 1], height_ratios=[1.5, 1.2, 0.3], hspace=0.4)
+
+    # Get available ports
+    available_ports = get_available_ports()
+
+    # 3D orientation view (left side, spans all 3 rows)
+    ax3d = fig.add_subplot(gs[:, 0], projection='3d')
     ax3d.set_xlim([-2, 2])
     ax3d.set_ylim([-2, 2])
     ax3d.set_zlim([-2, 2])
@@ -345,8 +427,8 @@ def init_plot():
     ax3d.quiver(0, 0, 0, 0, 2, 0, color='green', arrow_length_ratio=0.1, linewidth=2, label='Y (Pitch)')
     ax3d.quiver(0, 0, 0, 0, 0, 2, color='blue', arrow_length_ratio=0.1, linewidth=2, label='Z (Up)')
 
-    # 2D angle indicators
-    ax2d = fig.add_subplot(122)
+    # 2D angle indicators (top right - row 0)
+    ax2d = fig.add_subplot(gs[0, 1])
     ax2d.set_xlim([-90, 90])   # Roll: ±90° for full left/right range
     ax2d.set_ylim([-90, 90])   # Pitch: ±90° for full forward/backward range
     ax2d.set_xlabel('Roll (degrees)', fontsize=12)
@@ -391,9 +473,43 @@ def init_plot():
 
     ax2d.legend(loc='upper right')
 
-    return fig, ax3d, ax2d
+    # Log panel (middle right - row 1)
+    ax_log = fig.add_subplot(gs[1, 1])
+    ax_log.set_xlim([0, 1])
+    ax_log.set_ylim([0, 1])
+    ax_log.axis('off')
+    ax_log.set_title('Arduino Status Log', fontsize=12, fontweight='bold', loc='left')
 
-def update_plot(frame, fig, ax3d, ax2d):
+    # Port selector panel (bottom right - row 2)
+    ax_port = fig.add_subplot(gs[2, 1])
+    ax_port.set_xlim([0, 1])
+    ax_port.set_ylim([0, 1])
+    ax_port.axis('off')
+    ax_port.set_title('Serial Port Selector', fontsize=11, fontweight='bold', loc='left')
+
+    # Create port selection buttons
+    port_buttons = []
+    if available_ports:
+        # Create a button for each port
+        for i, (port_device, port_desc) in enumerate(available_ports[:3]):  # Show max 3 ports
+            btn_ax = plt.axes([0.52 + i * 0.15, 0.02, 0.13, 0.04])
+            btn = Button(btn_ax, port_device.split('/')[-1], color='lightblue', hovercolor='lightgreen')
+
+            # Button callback
+            def make_callback(port):
+                def callback(event):
+                    switch_serial_port(port)
+                return callback
+
+            btn.on_clicked(make_callback(port_device))
+            port_buttons.append(btn)
+    else:
+        ax_port.text(0.5, 0.5, 'No serial ports detected',
+                    ha='center', va='center', fontsize=10, color='red', style='italic')
+
+    return fig, ax3d, ax2d, ax_log, ax_port, port_buttons
+
+def update_plot(frame, fig, ax3d, ax2d, ax_port, ax_log):
     """Update the plot with new data"""
     read_latest_data()
 
@@ -408,6 +524,8 @@ def update_plot(frame, fig, ax3d, ax2d):
     # Clear previous frame
     ax3d.clear()
     ax2d.clear()
+    ax_port.clear()
+    ax_log.clear()
 
     # Redraw 3D view
     ax3d.set_xlim([-2, 2])
@@ -514,15 +632,74 @@ def update_plot(frame, fig, ax3d, ax2d):
                 color='white',
                 bbox=dict(boxstyle='round,pad=1', facecolor='orange', alpha=0.9, edgecolor='red', linewidth=4))
     elif calibration_status == 'calibrated':
-        # Brief "complete" message
-        fig.text(0.5, 0.5, 'CALIBRATION\nCOMPLETE!',
-                ha='center', va='center', fontsize=28, fontweight='bold',
-                color='white',
-                bbox=dict(boxstyle='round,pad=1', facecolor='green', alpha=0.9, edgecolor='darkgreen', linewidth=4))
+        # Auto-clear after 2 seconds
+        complete_time = current_data.get('calibration_complete_time')
+        if complete_time and (time.time() - complete_time < 2.0):
+            # Brief "complete" message (shows for 2 seconds)
+            fig.text(0.5, 0.5, 'CALIBRATION\nCOMPLETE!',
+                    ha='center', va='center', fontsize=28, fontweight='bold',
+                    color='white',
+                    bbox=dict(boxstyle='round,pad=1', facecolor='green', alpha=0.9, edgecolor='darkgreen', linewidth=4))
+        else:
+            # Clear status after 2 seconds
+            current_data['calibration_status'] = None
 
     ax2d.legend(loc='upper right')
 
-    return ax3d, ax2d
+    # Render port selector panel
+    ax_port.set_xlim([0, 1])
+    ax_port.set_ylim([0, 1])
+    ax_port.axis('off')
+
+    # Display current port (above the buttons area)
+    current_port_display = current_serial_port if current_serial_port else SERIAL_PORT
+    conn_status = "Connected" if serial_connection and serial_connection.is_open else "Disconnected"
+    conn_color = 'green' if serial_connection and serial_connection.is_open else 'red'
+
+    # Shortened port name for display
+    port_short = current_port_display.split('/')[-1] if current_port_display else "None"
+
+    ax_port.text(0.01, 0.85, f'Port: {port_short}',
+                fontsize=9, fontweight='bold', verticalalignment='top')
+    ax_port.text(0.35, 0.85, f'| Status: {conn_status}',
+                fontsize=9, verticalalignment='top', color=conn_color, fontweight='bold')
+
+    # Render log panel
+    ax_log.set_xlim([0, 1])
+    ax_log.set_ylim([0, 1])
+    ax_log.axis('off')
+    ax_log.set_title('Arduino Status Log', fontsize=11, fontweight='bold', loc='left')
+
+    # Display recent log messages (newest at bottom)
+    if log_messages:
+        y_position = 0.95
+        y_step = 0.95 / MAX_LOG_MESSAGES
+
+        for msg in log_messages:
+            # Color code by message type
+            if 'ERROR' in msg:
+                color = 'red'
+                weight = 'bold'
+            elif 'DEBUG' in msg:
+                color = 'blue'
+                weight = 'normal'
+            elif 'STATUS' in msg:
+                color = 'green'
+                weight = 'normal'
+            else:
+                color = 'black'
+                weight = 'normal'
+
+            ax_log.text(0.02, y_position, msg, fontsize=8,
+                       verticalalignment='top', fontfamily='monospace',
+                       color=color, fontweight=weight)
+            y_position -= y_step
+    else:
+        # No messages yet
+        ax_log.text(0.5, 0.5, 'Waiting for Arduino messages...',
+                   ha='center', va='center', fontsize=10, color='gray', style='italic')
+
+    return ax3d, ax2d, ax_port, ax_log
 
 def main():
     """Main visualization loop"""
@@ -539,13 +716,13 @@ def main():
 
     try:
         # Initialize plot
-        fig, ax3d, ax2d = init_plot()
+        fig, ax3d, ax2d, ax_log, ax_port, port_buttons = init_plot()
 
         # Create animation
-        anim = FuncAnimation(fig, update_plot, fargs=(fig, ax3d, ax2d),
+        anim = FuncAnimation(fig, update_plot, fargs=(fig, ax3d, ax2d, ax_port, ax_log),
                            interval=UPDATE_INTERVAL, blit=False, cache_frame_data=False)
 
-        plt.tight_layout()
+        # Note: tight_layout() is incompatible with Button widgets, but we use GridSpec with explicit spacing
         plt.show()
 
     except KeyboardInterrupt:

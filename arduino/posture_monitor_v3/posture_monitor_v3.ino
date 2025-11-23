@@ -552,13 +552,13 @@ void setup() {
 
   // Try to detect MPU9250/6500
   Serial.println("{\"status\":\"sensor_detect\",\"message\":\"Scanning for MPU9250/6500 at 0x68...\"}");
-  Serial.println("{\"debug\":\"Starting I2C transmission to 0x68\"}");
   Wire.beginTransmission(MPU_ADDR);
-  Serial.println("{\"debug\":\"Waiting for I2C response...\"}");
   byte error = Wire.endTransmission();
-  Serial.print("{\"debug\":\"I2C response received, error code: ");
+
+  // Debug output AFTER I2C transaction completes
+  Serial.print("{\"debug\":\"I2C detection complete, error code: ");
   Serial.print(error);
-  Serial.println("\"}");
+  Serial.println(error == 0 ? " (sensor found)\"}" : " (sensor not found)\"}");
 
   if (error != 0) {
     Serial.print("{\"status\":\"error\",\"message\":\"MPU9250 not found at 0x68! I2C error code: ");
