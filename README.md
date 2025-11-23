@@ -62,7 +62,7 @@ Active Buzzer   → Arduino
 - Wire library (included with Arduino IDE)
 
 **Python Visualizer (Optional):**
-- Python 3.7 or higher
+- Python 3.9 or higher (required by matplotlib 3.10+)
 - pip (Python package manager)
 
 ### Installation
@@ -235,6 +235,8 @@ exo-pos/
 ### Visualizer won't start
 
 **Common issues**:
+- **Python version too old**: The visualizer requires Python 3.9+ (for matplotlib 3.10+). Check your version with `python3 --version`
+  - If you have Python 3.7-3.8, you can use older dependencies: `pip install "matplotlib<3.9" "numpy<2.0" pyserial`
 - **Port not found**: Update the serial port in the script or pass as argument
 - **Permission denied**: On Linux, add your user to `dialout` group: `sudo usermod -a -G dialout $USER`
 - **Missing dependencies**: Run `pip install pyserial matplotlib numpy`
