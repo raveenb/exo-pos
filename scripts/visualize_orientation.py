@@ -107,7 +107,9 @@ current_data = {
     'forward_slouch': False,
     'alert_level_name': 'none',
     'cumulative_slouch_s': 0,
-    'threshold': 15.0
+    'threshold': 15.0,
+    'calibration_status': None,  # Track calibration state
+    'calibration_countdown': None  # Countdown timer
 }
 
 # File/Serial tracking
@@ -233,8 +235,25 @@ def read_latest_data():
                             print("Visualization starting...\n")
 
                     data = json.loads(line)
+
+                    # Check for calibration messages
+                    if 'status' in data:
+                        status = data.get('status', '')
+                        if status == 'calibrating':
+                            current_data['calibration_status'] = 'calibrating'
+                            current_data['calibration_countdown'] = data.get('countdown_s', None)
+                            print(f"CALIBRATION: {data.get('countdown_s', '?')}s remaining - Hold still!")
+                        elif status == 'calibrated':
+                            current_data['calibration_status'] = 'calibrated'
+                            current_data['calibration_countdown'] = None
+                            print(f"CALIBRATION COMPLETE! Offsets: pitch={data.get('pitch_offset', 0):.2f}°, roll={data.get('roll_offset', 0):.2f}°")
+                        continue
+
                     # Only update if this is actual posture data
                     if 'pitch' in data and 'roll' in data:
+                        # Clear calibration status once we start getting data
+                        if current_data['calibration_status'] == 'calibrated':
+                            current_data['calibration_status'] = None
                         # Apply exponential moving average smoothing
                         if not smoothing_initialized:
                             # First reading: initialize smoothed values
@@ -484,6 +503,22 @@ def update_plot(frame, fig, ax3d, ax2d):
     ax2d.text(0.02, 0.90, f'Cumulative: {cumulative}s',
              transform=ax2d.transAxes, fontsize=10, verticalalignment='top',
              bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.5))
+
+    # Show calibration status overlay
+    calibration_status = current_data.get('calibration_status')
+    if calibration_status == 'calibrating':
+        countdown = current_data.get('calibration_countdown', '?')
+        # Large centered overlay on both plots
+        fig.text(0.5, 0.5, f'CALIBRATING\n{countdown}s\nHOLD STILL!',
+                ha='center', va='center', fontsize=32, fontweight='bold',
+                color='white',
+                bbox=dict(boxstyle='round,pad=1', facecolor='orange', alpha=0.9, edgecolor='red', linewidth=4))
+    elif calibration_status == 'calibrated':
+        # Brief "complete" message
+        fig.text(0.5, 0.5, 'CALIBRATION\nCOMPLETE!',
+                ha='center', va='center', fontsize=28, fontweight='bold',
+                color='white',
+                bbox=dict(boxstyle='round,pad=1', facecolor='green', alpha=0.9, edgecolor='darkgreen', linewidth=4))
 
     ax2d.legend(loc='upper right')
 
