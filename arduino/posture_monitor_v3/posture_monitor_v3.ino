@@ -552,8 +552,13 @@ void setup() {
 
   // Try to detect MPU9250/6500
   Serial.println("{\"status\":\"sensor_detect\",\"message\":\"Scanning for MPU9250/6500 at 0x68...\"}");
+  Serial.println("{\"debug\":\"Starting I2C transmission to 0x68\"}");
   Wire.beginTransmission(MPU_ADDR);
+  Serial.println("{\"debug\":\"Waiting for I2C response...\"}");
   byte error = Wire.endTransmission();
+  Serial.print("{\"debug\":\"I2C response received, error code: ");
+  Serial.print(error);
+  Serial.println("\"}");
 
   if (error != 0) {
     Serial.print("{\"status\":\"error\",\"message\":\"MPU9250 not found at 0x68! I2C error code: ");
@@ -581,12 +586,13 @@ void setup() {
       Serial.println(F("{\"error\":\"No I2C devices\"}"));
     }
 
-    // Blink LED rapidly to indicate error
+    // Gentle periodic beep to indicate error (not annoying while fixing wiring)
     while(true) {
+      // Single short beep every 3 seconds
       digitalWrite(BUZZER_PIN, LOW);
-      delay(100);
+      delay(150);  // Short beep
       digitalWrite(BUZZER_PIN, HIGH);
-      delay(100);
+      delay(3000);  // Long silence (3 seconds)
     }
   }
 
