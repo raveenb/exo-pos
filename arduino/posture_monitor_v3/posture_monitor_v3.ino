@@ -2,16 +2,17 @@
  * Posture Monitor V3 - Progressive Alert System
  *
  * Hardware:
- *   - MPU6050 (accelerometer + gyroscope)
+ *   - MPU9250/MPU6500 (accelerometer + gyroscope)
  *   - Buzzer on pin 3
- *   - Mounted on C7 vertebrae (base of neck)
+ *   - Mounted on head (attached to hat)
  *
  * Features:
- *   - Multi-axis position tracking (pitch, roll, yaw rate)
+ *   - Multi-axis head position tracking (pitch, roll)
+ *   - 10-second calibration window on startup with audio feedback
  *   - Progressive alert escalation (5s, 30s, 1m, 2m, 3m, 4m, 5m)
  *   - Cumulative slouch time tracking (15-minute rolling window)
  *   - Motion detection to filter active movement vs static slouching
- *   - Positive feedback tone after correcting critical posture
+ *   - Calibration-relative slouch detection
  *   - Enhanced JSON output with detailed metrics
  */
 
@@ -43,7 +44,7 @@
 #define INT_PIN_CFG  0x37  // For MPU9250 magnetometer bypass
 
 // Buzzer
-#define BUZZER_PIN 3
+#define BUZZER_PIN 13
 
 // ============================================================================
 // POSTURE DETECTION PARAMETERS
@@ -505,6 +506,15 @@ void calibrate() {
   Serial.print(",\"roll_offset\":");
   Serial.print(rollOffset, 2);
   Serial.println("}");
+
+  // 2 long beeps to signal calibration complete
+  delay(300);
+  for (int i = 0; i < 2; i++) {
+    digitalWrite(BUZZER_PIN, LOW);   // Beep
+    delay(400);
+    digitalWrite(BUZZER_PIN, HIGH);  // Silent
+    delay(300);
+  }
 }
 
 // ============================================================================
@@ -513,18 +523,69 @@ void calibrate() {
 
 void setup() {
   Serial.begin(115200);
+  delay(1000);  // Give serial time to initialize
+
+  Serial.println("{\"status\":\"starting\",\"message\":\"Posture Monitor V3 booting...\"}");
+
   Wire.begin();
+  Serial.println("{\"status\":\"i2c_init\",\"message\":\"I2C bus initialized\"}");
 
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, HIGH);  // Active buzzer: HIGH = silent, LOW = beep
+  Serial.println("{\"status\":\"buzzer_init\",\"message\":\"Buzzer configured on pin 13\"}");
+
+  // Try to detect MPU9250/6500
+  Serial.println("{\"status\":\"sensor_detect\",\"message\":\"Scanning for MPU9250/6500 at 0x68...\"}");
+  Wire.beginTransmission(MPU_ADDR);
+  byte error = Wire.endTransmission();
+
+  if (error != 0) {
+    Serial.print("{\"status\":\"error\",\"message\":\"MPU9250 not found at 0x68! I2C error code: ");
+    Serial.print(error);
+    Serial.println("\"}");
+
+    // Scan all I2C addresses to find the sensor
+    Serial.println(F("{\"status\":\"i2c_scan\",\"message\":\"Scanning...\"}"));
+    byte devicesFound = 0;
+    for (byte addr = 1; addr < 127; addr++) {
+      Wire.beginTransmission(addr);
+      if (Wire.endTransmission() == 0) {
+        Serial.print(F("{\"i2c_addr\":\"0x"));
+        Serial.print(addr, HEX);
+        Serial.println(F("\"}"));
+        devicesFound++;
+      }
+    }
+
+    Serial.print(F("{\"status\":\"scan_complete\",\"devices\":"));
+    Serial.print(devicesFound);
+    Serial.println(F("}"));
+
+    if (devicesFound == 0) {
+      Serial.println(F("{\"error\":\"No I2C devices\"}"));
+    }
+
+    // Blink LED rapidly to indicate error
+    while(true) {
+      digitalWrite(BUZZER_PIN, LOW);
+      delay(100);
+      digitalWrite(BUZZER_PIN, HIGH);
+      delay(100);
+    }
+  }
+
+  Serial.println("{\"status\":\"sensor_found\",\"message\":\"MPU9250/6500 detected!\"}");
 
   // Initialize MPU9250/6500
+  Serial.println("{\"status\":\"sensor_init\",\"message\":\"Initializing sensor...\"}");
+
   // Reset device
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(PWR_MGMT_1);
   Wire.write(0x80);  // Reset
   Wire.endTransmission();
   delay(100);
+  Serial.println("{\"status\":\"sensor_reset\",\"message\":\"Sensor reset complete\"}");
 
   // Wake up device
   Wire.beginTransmission(MPU_ADDR);
@@ -532,6 +593,7 @@ void setup() {
   Wire.write(0x00);  // Clear sleep bit, use internal oscillator
   Wire.endTransmission();
   delay(10);
+  Serial.println("{\"status\":\"sensor_wake\",\"message\":\"Sensor awake\"}");
 
   // Configure sample rate divider
   Wire.beginTransmission(MPU_ADDR);
@@ -567,8 +629,26 @@ void setup() {
 
   Serial.println("{\"status\":\"initialized\",\"version\":\"v3_mpu9250\",\"device\":\"posture_monitor\",\"sensor\":\"MPU9250/6500\"}");
 
-  // Auto-calibrate on startup
-  delay(1000);
+  // 10-second calibration window - gives user time to position sensor
+  Serial.println("{\"status\":\"calibration_window\",\"message\":\"Position sensor at neutral posture...\",\"countdown\":10}");
+
+  // 3 short beeps to signal countdown is starting
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(BUZZER_PIN, LOW);   // Beep
+    delay(150);
+    digitalWrite(BUZZER_PIN, HIGH);  // Silent
+    delay(150);
+  }
+  delay(500);  // Pause before countdown
+
+  for (int i = 10; i > 0; i--) {
+    Serial.print("{\"status\":\"calibration_countdown\",\"seconds\":");
+    Serial.print(i);
+    Serial.println("}");
+    delay(1000);
+  }
+
+  // Now calibrate
   calibrate();
 
   // Initialize timing

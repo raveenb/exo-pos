@@ -2,13 +2,14 @@
 """
 Real-time 3D Orientation Visualizer for Posture Monitor
 
-Reads JSON data from serial log and displays:
-- 3D cube representing sensor orientation (pitch and roll)
+Reads JSON data from serial port and displays:
+- 3D cube representing head orientation (pitch and roll)
 - Real-time angle indicators
 - Posture status and alerts
+- Sensor mounted on hat for direct head tracking
 
 Requirements:
-    pip install matplotlib numpy
+    pip install matplotlib numpy pyserial
 """
 
 import json
@@ -52,6 +53,12 @@ current_data = {
 log_file_handle = None
 log_file_position = 0
 serial_connection = None
+
+# Smoothing filter state (Exponential Moving Average)
+smoothed_pitch = 0.0
+smoothed_roll = 0.0
+smoothing_initialized = False
+SMOOTHING_ALPHA = 0.5  # Higher = more responsive, Lower = smoother (0.3-0.7 optimal)
 
 def rotation_matrix_x(angle):
     """Rotation matrix around X axis (roll)"""
@@ -125,6 +132,7 @@ def get_alert_color(level_name):
 def read_latest_data():
     """Read data from serial port or log file"""
     global current_data, log_file_handle, log_file_position, serial_connection
+    global smoothed_pitch, smoothed_roll, smoothing_initialized
 
     if USE_SERIAL_PORT:
         # Read directly from serial port
@@ -146,6 +154,20 @@ def read_latest_data():
                     data = json.loads(line)
                     # Only update if this is actual posture data
                     if 'pitch' in data and 'roll' in data:
+                        # Apply exponential moving average smoothing
+                        if not smoothing_initialized:
+                            # First reading: initialize smoothed values
+                            smoothed_pitch = data['pitch']
+                            smoothed_roll = data['roll']
+                            smoothing_initialized = True
+                        else:
+                            # Apply EMA: smoothed = α × new + (1-α) × old
+                            smoothed_pitch = SMOOTHING_ALPHA * data['pitch'] + (1 - SMOOTHING_ALPHA) * smoothed_pitch
+                            smoothed_roll = SMOOTHING_ALPHA * data['roll'] + (1 - SMOOTHING_ALPHA) * smoothed_roll
+
+                        # Update current_data with smoothed values
+                        data['pitch'] = smoothed_pitch
+                        data['roll'] = smoothed_roll
                         current_data.update(data)
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     continue
@@ -180,6 +202,20 @@ def read_latest_data():
                         data = json.loads(line)
                         # Only update if this is actual posture data
                         if 'pitch' in data and 'roll' in data:
+                            # Apply exponential moving average smoothing
+                            if not smoothing_initialized:
+                                # First reading: initialize smoothed values
+                                smoothed_pitch = data['pitch']
+                                smoothed_roll = data['roll']
+                                smoothing_initialized = True
+                            else:
+                                # Apply EMA: smoothed = α × new + (1-α) × old
+                                smoothed_pitch = SMOOTHING_ALPHA * data['pitch'] + (1 - SMOOTHING_ALPHA) * smoothed_pitch
+                                smoothed_roll = SMOOTHING_ALPHA * data['roll'] + (1 - SMOOTHING_ALPHA) * smoothed_roll
+
+                            # Update current_data with smoothed values
+                            data['pitch'] = smoothed_pitch
+                            data['roll'] = smoothed_roll
                             current_data.update(data)
                             break
                     except json.JSONDecodeError:
@@ -202,7 +238,7 @@ def init_plot():
     ax3d.set_xlabel('X (Roll axis)')
     ax3d.set_ylabel('Y (Pitch axis)')
     ax3d.set_zlabel('Z (Up)')
-    ax3d.set_title('Sensor Orientation (MPU9250)', fontsize=14, fontweight='bold')
+    ax3d.set_title('Head Orientation (Hat-Mounted MPU9250)', fontsize=14, fontweight='bold')
 
     # Draw reference frame
     ax3d.quiver(0, 0, 0, 2, 0, 0, color='red', arrow_length_ratio=0.1, linewidth=2, label='X (Roll)')
