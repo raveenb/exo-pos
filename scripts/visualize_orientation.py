@@ -429,8 +429,8 @@ def init_plot():
 
     # 2D angle indicators (top right - row 0)
     ax2d = fig.add_subplot(gs[0, 1])
-    ax2d.set_xlim([-90, 90])   # Roll: ±90° for full left/right range
-    ax2d.set_ylim([-90, 90])   # Pitch: ±90° for full forward/backward range
+    ax2d.set_xlim([-180, 180])   # Roll: ±180° for extended range (tilted sensor support)
+    ax2d.set_ylim([-180, 180])   # Pitch: ±180° for extended range (tilted sensor support)
     ax2d.set_xlabel('Roll (degrees)', fontsize=12)
     ax2d.set_ylabel('Pitch (degrees)', fontsize=12)
     ax2d.set_title('Angle Indicators', fontsize=14, fontweight='bold')
@@ -441,22 +441,22 @@ def init_plot():
     # Draw threshold zones - all four quadrants
     threshold = 15.0
     # Top zone: Pitch forward (looking down)
-    slouch_zone_top = Rectangle((-90, threshold), 180, 90-threshold,
+    slouch_zone_top = Rectangle((-180, threshold), 360, 180-threshold,
                            alpha=0.25, color='#FF4444', label='Slouch Zones')
     ax2d.add_patch(slouch_zone_top)
 
     # Bottom zone: Pitch backward (looking up)
-    slouch_zone_bottom = Rectangle((-90, -90), 180, 90-threshold,
+    slouch_zone_bottom = Rectangle((-180, -180), 360, 180-threshold,
                            alpha=0.25, color='#FF4444')
     ax2d.add_patch(slouch_zone_bottom)
 
     # Left zone: Roll left (head to left shoulder)
-    slouch_zone_left = Rectangle((-90, -threshold), 90-threshold, 2*threshold,
+    slouch_zone_left = Rectangle((-180, -threshold), 180-threshold, 2*threshold,
                            alpha=0.25, color='#FF8800')
     ax2d.add_patch(slouch_zone_left)
 
     # Right zone: Roll right (head to right shoulder)
-    slouch_zone_right = Rectangle((threshold, -threshold), 90-threshold, 2*threshold,
+    slouch_zone_right = Rectangle((threshold, -threshold), 180-threshold, 2*threshold,
                            alpha=0.25, color='#FF8800')
     ax2d.add_patch(slouch_zone_right)
 
@@ -565,8 +565,8 @@ def update_plot(frame, fig, ax3d, ax2d, ax_port, ax_log):
     ax3d.set_title(status_text, fontsize=14, fontweight='bold', color=status_color)
 
     # Redraw 2D angle view
-    ax2d.set_xlim([-90, 90])   # Roll: ±90° for full left/right range
-    ax2d.set_ylim([-90, 90])   # Pitch: ±90° for full forward/backward range
+    ax2d.set_xlim([-180, 180])   # Roll: ±180° for extended range (tilted sensor support)
+    ax2d.set_ylim([-180, 180])   # Pitch: ±180° for extended range (tilted sensor support)
     ax2d.set_xlabel('Roll (degrees)', fontsize=12)
     ax2d.set_ylabel('Pitch (degrees)', fontsize=12)
     ax2d.set_title(f'Pitch: {pitch:.1f}° | Roll: {roll:.1f}°',
@@ -577,22 +577,22 @@ def update_plot(frame, fig, ax3d, ax2d, ax_port, ax_log):
 
     # Draw threshold zones - all four quadrants
     # Top zone: Pitch forward (looking down)
-    slouch_zone_top = Rectangle((-90, threshold), 180, 90-threshold,
+    slouch_zone_top = Rectangle((-180, threshold), 360, 180-threshold,
                            alpha=0.25, color='#FF4444', label='Slouch Zones')
     ax2d.add_patch(slouch_zone_top)
 
     # Bottom zone: Pitch backward (looking up)
-    slouch_zone_bottom = Rectangle((-90, -90), 180, 90-threshold,
+    slouch_zone_bottom = Rectangle((-180, -180), 360, 180-threshold,
                            alpha=0.25, color='#FF4444')
     ax2d.add_patch(slouch_zone_bottom)
 
     # Left zone: Roll left (head to left shoulder)
-    slouch_zone_left = Rectangle((-90, -threshold), 90-threshold, 2*threshold,
+    slouch_zone_left = Rectangle((-180, -threshold), 180-threshold, 2*threshold,
                            alpha=0.25, color='#FF8800')
     ax2d.add_patch(slouch_zone_left)
 
     # Right zone: Roll right (head to right shoulder)
-    slouch_zone_right = Rectangle((threshold, -threshold), 90-threshold, 2*threshold,
+    slouch_zone_right = Rectangle((threshold, -threshold), 180-threshold, 2*threshold,
                            alpha=0.25, color='#FF8800')
     ax2d.add_patch(slouch_zone_right)
 
