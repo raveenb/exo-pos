@@ -180,22 +180,31 @@ void readGyroscope(float &gx, float &gy, float &gz) {
 
 // Calculate head position angles from accelerometer
 void calculatePosture(float ax, float ay, float az, float &pitch, float &roll) {
-  // Pitch: forward/backward tilt (looking down/up)
+  // SENSOR ORIENTATION (STANDARD - Z-axis points down):
+  //   Z-axis → down (toward neck, with gravity)
+  //   X-axis → left/right (sideways)
+  //   Y-axis → forward/backward (along head direction)
+
+  // When sitting upright with good posture:
+  //   - Z has most gravity (-1g downward)
+  //   - X and Y have minimal gravity (~0g)
+
+  // STANDARD IMU orientation formulas:
+  // Z-axis is the primary gravity reference
+
+  // Pitch: forward/backward tilt (slouching)
+  // When HEAD tilts FORWARD: Y becomes positive
+  // When HEAD tilts BACKWARD: Y becomes negative
   pitch = atan2(ay, az) * 180.0 / PI;
 
   // Roll: left/right tilt (ear to shoulder)
+  // When HEAD tilts to RIGHT: X becomes positive
+  // When HEAD tilts to LEFT: X becomes negative
   roll = atan2(ax, az) * 180.0 / PI;
 
-  // Apply calibration offsets FIRST
+  // Apply calibration offsets
   pitch -= pitchOffset;
   roll -= rollOffset;
-
-  // THEN invert BOTH axes for sensor orientation
-  // Sensor mounted upside-down on hat, so negate both pitch and roll AFTER calibration
-  // Positive pitch = looking down (forward slouch)
-  // Negative pitch = looking up (backward tilt)
-  pitch = -pitch;
-  roll = -roll;
 }
 
 // Check if user is actively moving (not static slouch)
@@ -706,12 +715,20 @@ void loop() {
 
   // SIMPLIFIED ALERT LOGIC: Just beep when slouching for 5+ seconds
   // Instead of complex milestone detection, use simple threshold
+  // FIXED: Track if we've already alerted for current slouch event
+  static bool hasAlertedThisSlouch = false;
 
-  if (inBadPosture && !isMoving && cumulativeSlouchTime >= 5000 && !buzzerActive) {
-    // Start beeping after 5 seconds of continuous slouch
+  if (inBadPosture && !isMoving && cumulativeSlouchTime >= 5000 && !buzzerActive && !hasAlertedThisSlouch) {
+    // Start beeping after 5 seconds of continuous slouch (only once per slouch event)
     buzzerActive = true;
     buzzerStartTime = now;
     currentAlertLevel = LEVEL_WARNING;
+    hasAlertedThisSlouch = true;  // Prevent re-triggering until posture improves
+  }
+
+  // Reset alert flag when posture improves
+  if (!inBadPosture) {
+    hasAlertedThisSlouch = false;
   }
 
   // Handle posture correction after critical state
