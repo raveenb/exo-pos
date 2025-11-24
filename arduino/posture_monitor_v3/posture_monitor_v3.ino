@@ -180,27 +180,27 @@ void readGyroscope(float &gx, float &gy, float &gz) {
 
 // Calculate head position angles from accelerometer
 void calculatePosture(float ax, float ay, float az, float &pitch, float &roll) {
-  // SENSOR ORIENTATION (STANDARD - Z-axis points down):
+  // SENSOR ORIENTATION (CORRECTED - Z-axis points down):
   //   Z-axis → down (toward neck, with gravity)
-  //   X-axis → left/right (sideways)
-  //   Y-axis → forward/backward (along head direction)
+  //   X-axis → forward/backward (along head direction) - SWAPPED!
+  //   Y-axis → left/right (sideways) - SWAPPED!
 
   // When sitting upright with good posture:
   //   - Z has most gravity (-1g downward)
   //   - X and Y have minimal gravity (~0g)
 
-  // STANDARD IMU orientation formulas:
+  // CORRECTED formulas based on actual sensor physical orientation:
   // Z-axis is the primary gravity reference
 
   // Pitch: forward/backward tilt (slouching)
-  // When HEAD tilts FORWARD: Y becomes positive
-  // When HEAD tilts BACKWARD: Y becomes negative
-  pitch = atan2(ay, az) * 180.0 / PI;
+  // When HEAD tilts FORWARD: X becomes positive
+  // When HEAD tilts BACKWARD: X becomes negative
+  pitch = atan2(ax, az) * 180.0 / PI;
 
   // Roll: left/right tilt (ear to shoulder)
-  // When HEAD tilts to RIGHT: X becomes positive
-  // When HEAD tilts to LEFT: X becomes negative
-  roll = atan2(ax, az) * 180.0 / PI;
+  // When HEAD tilts to RIGHT: Y becomes positive
+  // When HEAD tilts to LEFT: Y becomes negative
+  roll = atan2(ay, az) * 180.0 / PI;
 
   // Apply calibration offsets
   pitch -= pitchOffset;
