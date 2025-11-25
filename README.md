@@ -5,8 +5,8 @@ A wearable hat-mounted device that monitors head position and alerts users when 
 ## Authors & Credits
 
 **Project Created By:**
-- **Manas** - Class X, Shishya BEML Public School, Bangalore, India
-- **Riya** - Class X, Shishya BEML Public School, Bangalore, India
+- **Manas J Krishna** - Class X, Shishya BEML Public School, Bangalore, India
+- **Riya Raveen** - Class X, Shishya BEML Public School, Bangalore, India
 
 This science fair project was conceived, designed, and presented by Manas and Riya as part of their Class X curriculum. The students conducted research on posture-related health issues, designed the hardware system, and demonstrated the device at their school science exhibition.
 
