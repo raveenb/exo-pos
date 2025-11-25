@@ -2,6 +2,17 @@
 
 A wearable hat-mounted device that monitors head position and alerts users when poor posture is detected. Designed to help prevent "tech neck" and forward head posture with **bidirectional detection** for both forward and backward head tilt.
 
+## Authors & Credits
+
+**Project Created By:**
+- **Manas** - Class X, Shishya BEML Public School, Bangalore, India
+- **Riya** - Class X, Shishya BEML Public School, Bangalore, India
+
+This science fair project was conceived, designed, and presented by Manas and Riya as part of their Class X curriculum. The students conducted research on posture-related health issues, designed the hardware system, and demonstrated the device at their school science exhibition.
+
+**Mentor:**
+- Raveen Beemsingh (Technical guidance and code development)
+
 ## Overview
 
 This project uses an MPU6050/MPU9250 motion sensor mounted on a hat to track head position in real-time. When the user maintains poor posture for more than 5 seconds, an audio alert reminds them to correct their position.
@@ -364,10 +375,12 @@ See LICENSE file for full details.
 
 ## Acknowledgments
 
+- **Student Creators**: Manas and Riya (Class X, Shishya BEML Public School, Bangalore, India) for their innovative science fair project addressing modern posture challenges
 - Inspired by ergonomic research on "tech neck" and forward head posture
 - Built with Arduino Uno and MPU6050/MPU9250 sensors
 - 3D visualization using matplotlib
-- Developed with assistance from Claude Code
+- Technical mentorship by Raveen Beemsingh
+- Code development assistance from Claude Code (Anthropic)
 
 ## Support
 
